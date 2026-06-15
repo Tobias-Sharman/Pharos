@@ -1,0 +1,16 @@
+# System and editor related
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Build directories
+build/
+*/build/
+cmake-build-*/
+compile_commands.json
+
+# Test and instance directories
+*/scribe-root/
+*/test-root/
+*/tests/tmp/

@@ -1,0 +1,122 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: Latest
+
+# =============================================================================
+# Indentation
+# =============================================================================
+UseTab: ForIndentation
+IndentWidth: 4
+TabWidth: 4
+
+NamespaceIndentation: None
+AccessModifierOffset: -4
+IndentCaseLabels: true
+IndentCaseBlocks: false
+IndentPPDirectives: None
+
+# =============================================================================
+# Line width
+# =============================================================================
+ColumnLimit: 120
+
+# =============================================================================
+# Braces and short constructs
+# =============================================================================
+BreakBeforeBraces: Attach
+
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Empty
+
+# =============================================================================
+# Function calls, declarations, and return types
+# =============================================================================
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 1000000
+
+# =============================================================================
+# Constructors
+# =============================================================================
+BreakConstructorInitializers: AfterColon
+ConstructorInitializerIndentWidth: 4
+
+# =============================================================================
+# Templates
+# =============================================================================
+AlwaysBreakTemplateDeclarations: Yes
+
+# =============================================================================
+# Pointers, references, and qualifiers
+# =============================================================================
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+DerivePointerAlignment: false
+QualifierAlignment: Leave
+
+# =============================================================================
+# Spacing
+# =============================================================================
+SpaceBeforeParens: ControlStatements
+SpaceBeforeAssignmentOperators: true
+
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpacesInAngles: Never
+SpacesInContainerLiterals: false
+SpaceAfterCStyleCast: false
+
+Cpp11BracedListStyle: true
+
+# =============================================================================
+# Operator wrapping
+# =============================================================================
+BreakBeforeBinaryOperators: All
+
+# =============================================================================
+# Includes and using declarations
+# =============================================================================
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeIsMainRegex: '([-_](test|unittest))?$'
+
+IncludeCategories:
+  - Regex: '^<.*>'
+    Priority: 2
+
+  - Regex: '^".*"'
+    Priority: 3
+
+SortUsingDeclarations: true
+
+# =============================================================================
+# Class and namespace layout
+# =============================================================================
+EmptyLineBeforeAccessModifier: LogicalBlock
+FixNamespaceComments: true
+
+# Do not use clang-format's old-style `namespace a { namespace b {` compaction.
+# Prefer manually writing modern C++17 namespaces: `namespace a::b {`.
+CompactNamespaces: false
+
+# =============================================================================
+# Alignment
+# =============================================================================
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false
+
+# =============================================================================
+# Comments and empty lines
+# =============================================================================
+ReflowComments: false
+MaxEmptyLinesToKeep: 1
