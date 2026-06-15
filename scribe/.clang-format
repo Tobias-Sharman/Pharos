@@ -7,23 +7,23 @@ IncludeIsMainRegex: '$'
 
 IncludeCategories:
   # Public Scribe headers.
-  # Listed before broad angle rules so <scribe/...> is matched specially.
-  # SortPriority 0 lets a matching associated <scribe/foo.h> behave like a main include.
+  # Listed before broad angle rules so <scribe/...> is matched specially
+  # SortPriority 0 lets a matching associated <scribe/foo.h> behave like a main include
   - Regex: '^<scribe/.*>$'
     Priority: 3
     SortPriority: 0
 
-  # C standard library headers.
+  # C standard library headers
   - Regex: '^<.*\.h>$'
     Priority: 1
     SortPriority: 1
 
-  # Other external angle headers.
+  # Other external angle headers
   - Regex: '^<.*>$'
     Priority: 2
     SortPriority: 2
 
-  # Private/local quoted headers.
+  # Private/local quoted headers
   - Regex: '^".*"$'
     Priority: 4
     SortPriority: 4
