@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "fs.h"
+
 static const char* const g_kScribeRootDirectories[] = {"store",
                                                        "var",
                                                        "var/profiles",
@@ -35,80 +37,12 @@ enum ScribeError initScribeRoot(struct ScribeRoot* root, const char* path) {
 	return SCRIBE_OK;
 }
 
-enum ScribeError makeScribeRootPath(const struct ScribeRoot* root, const char* childPath, char** outpath) {
-	if (outpath == NULL) {
+enum ScribeError makeScribeRootPath(const struct ScribeRoot* root, const char* childPath, char** outPath) {
+	if (root == NULL) {
 		return SCRIBE_ERR_INVALID_ARGUMENT;
 	}
 
-	*outpath = NULL;
-
-	if (root == NULL || root->path == NULL || root->path[0] == '\0' || childPath == NULL || childPath[0] == '\0'
-	    || childPath[0] == '/') {
-		return SCRIBE_ERR_INVALID_ARGUMENT;
-	}
-
-	size_t rootLength = strlen(root->path);
-	size_t childLength = strlen(childPath);
-
-	while (rootLength > 1 && root->path[rootLength - 1] == '/') {
-		--rootLength;
-	}
-
-	size_t separatorLength = 1;
-	if (rootLength == 1 && root->path[0] == '/') {
-		separatorLength = 0;
-	}
-
-	if (rootLength > SIZE_MAX - separatorLength) {
-		return SCRIBE_ERR_OUT_OF_MEMORY;
-	}
-
-	size_t prefixLength = rootLength + separatorLength;
-	if (prefixLength > SIZE_MAX - childLength) {
-		return SCRIBE_ERR_OUT_OF_MEMORY;
-	}
-
-	size_t pathLength = prefixLength + childLength;
-	if (pathLength == SIZE_MAX) {
-		return SCRIBE_ERR_OUT_OF_MEMORY;
-	}
-
-	size_t allocationSize = pathLength + 1; // For '\0'
-	char* path = malloc(allocationSize);
-	if (path == NULL) {
-		return SCRIBE_ERR_OUT_OF_MEMORY;
-	}
-
-	memcpy(path, root->path, allocationSize);
-
-	if (separatorLength == 1) {
-		path[rootLength] = '/';
-		rootLength++;
-	}
-
-	memcpy(path + rootLength, childPath, childLength);
-	path[pathLength] = '\0';
-
-	*outpath = path;
-	return SCRIBE_OK;
-}
-
-// TODO: Add support for nested directory path (-p flag), do full composite path as ought to be interesting
-static enum ScribeError makeDirectory(const char* path) {
-	if (path == NULL) {
-		return SCRIBE_ERR_INVALID_ARGUMENT;
-	}
-
-	// TODO: Adjust permissions
-	if (mkdir(path, 0755) == 0) {
-		return SCRIBE_OK;
-	}
-
-	if (errno == EEXIST) {
-		return SCRIBE_OK;
-	}
-
-	return SCRIBE_ERR_ROOT_CREATE_FAILED;
+	return makeJoinedPath(root->path, childPath, outPath);
 }
 
 static enum ScribeError makeChildDirectory(const struct ScribeRoot* root, const char* childPath) {
@@ -123,7 +57,7 @@ static enum ScribeError makeChildDirectory(const struct ScribeRoot* root, const 
 		return err;
 	}
 
-	err = makeDirectory(path);
+	err = makeDirectory(path, 0755);
 	free(path);
 
 	return err;
@@ -165,7 +99,7 @@ enum ScribeError createScribeRootLayout(const struct ScribeRoot* root) {
 		return SCRIBE_ERR_INVALID_ARGUMENT;
 	}
 
-	enum ScribeError err = makeDirectory(root->path);
+	enum ScribeError err = makeDirectory(root->path, 0755);
 	if (err != SCRIBE_OK) {
 		return err;
 	}

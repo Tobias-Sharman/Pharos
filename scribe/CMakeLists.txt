@@ -9,6 +9,9 @@ project(Scribe
 add_executable(scribe
 	src/main.c
 	src/args.c
+	src/migrations.c
+	src/db.c
+	src/fs.c
 	src/root.c
 	src/runner.c
 	src/commands/init.c

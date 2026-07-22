@@ -2,5 +2,6 @@
 #define SCRIBE_CONFIG_H
 
 #define SCRIBE_DEFAULT_ROOT "./scribe-root"
+#define SCRIBE_DB_BUSY_TIMEOUT 5000
 
 #endif // SCRIBE_CONFIG_H
