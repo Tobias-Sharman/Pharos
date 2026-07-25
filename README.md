@@ -4,6 +4,8 @@ A custom Linux distribution built up from Linux From Scratch with a custom packa
 
 Far from an initial version.
 
+Currently working on a redesign of the migration style in inspiration of go migrate and redoing the style of the sql backend interface.
+
 Some details of the project can be seen further in the `docs/` but is ultimately limited due to how far from an initial version this is.
 
 ## Scribe
