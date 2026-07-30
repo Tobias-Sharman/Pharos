@@ -4,13 +4,13 @@
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
-#include <scribe/db_schema.h>
-
 #include "fs.h"
+#include "queries.h"
 
 struct ScribeMigration {
 	int version;
@@ -54,6 +54,18 @@ static void destroyMigrationPlan(struct ScribeMigrationPlan* plan) {
 	plan->count = 0;
 }
 
+static int hasUpSuffix(const char* filename) {
+	size_t len = strlen(filename);
+	static const char suffix[] = ".up.sql";
+	size_t suffixLen = sizeof(suffix) - 1;
+
+	if (len < suffixLen) {
+		return 0;
+	}
+
+	return strcmp(filename + (len - suffixLen), suffix) == 0;
+}
+
 // TODO: Reduce complexity by splitting off some sections into helpers
 static enum ScribeError createMigrationPlan(const char* migrationsDir, struct ScribeMigrationPlan* outPlan) {
 	if (outPlan == NULL) {
@@ -81,8 +93,7 @@ static enum ScribeError createMigrationPlan(const char* migrationsDir, struct Sc
 			continue;
 		}
 
-		const char* extension = strrchr(filename, '.');
-		if (extension == NULL || strcmp(extension, ".sql") != 0) {
+		if (!hasUpSuffix(filename)) {
 			continue;
 		}
 
@@ -174,67 +185,30 @@ cleanup:
 	return err;
 }
 
-static enum ScribeError recordMigration(struct ScribeDb* db, const struct ScribeMigration* migration) {
-	if (db == NULL || migration == NULL || migration->filename == NULL || migration->filename[0] == '\0') {
-		return SCRIBE_ERR_INVALID_ARGUMENT;
+// TODO: Should be a query
+static enum ScribeError migrationsTableExists(sqlite3* db, int* outExists) {
+	struct ScribeMigrationsTableExistsRow row;
+	int hasRow = 0;
+
+	enum ScribeError err = scribeMigrationsTableExists(db, "scribe_migrations", &row, &hasRow);
+	if (err != SCRIBE_OK) {
+		return err;
 	}
 
-	return scribeDbInsertIntText(db,
-	                             SCRIBE_DB_TABLE_MIGRATIONS,
-	                             SCRIBE_DB_COL_MIGRATIONS_VERSION,
-	                             SCRIBE_DB_COL_MIGRATIONS_FILENAME,
-	                             migration->version,
-	                             migration->filename);
+	if (hasRow) {
+		scribeMigrationsTableExistsRowFree(&row);
+	}
+
+	*outExists = hasRow;
+	return SCRIBE_OK;
 }
 
-static enum ScribeError applySingleMigration(struct ScribeDb* db, const struct ScribeMigration* migration) {
-	if (db == NULL || migration == NULL || migration->filepath == NULL || migration->filepath[0] == '\0') {}
-
-	char* sql = NULL;
-	enum ScribeError err = readFile(migration->filepath, &sql, NULL);
-	if (err != SCRIBE_OK) {
-		goto cleanup_sql;
-	}
-
-	err = scribeDbBegin(db);
-	if (err != SCRIBE_OK) {
-		goto cleanup_sql;
-	}
-
-	err = scribeDbExecute(db, sql);
-	if (err != SCRIBE_OK) {
-		goto rollback;
-	}
-
-	err = recordMigration(db, migration);
-	if (err != SCRIBE_OK) {
-		goto rollback;
-	}
-
-	err = scribeDbCommit(db);
-	if (err != SCRIBE_OK) {
-		goto rollback;
-	}
-
-	goto cleanup_sql;
-
-rollback:
-	(void)scribeDbRollback(db);
-
-cleanup_sql:
-	free(sql);
-	return err;
-}
-
-static enum ScribeError getCurrentMigrationVersion(struct ScribeDb* db, int* outVersion) {
-	if (db == NULL || outVersion == NULL) {
-		return SCRIBE_ERR_INVALID_ARGUMENT;
-	}
-
+// TODO: Add a force migration so deal with bricked db due to failed update
+static enum ScribeError getCurrentMigrationVersion(sqlite3* db, int* outVersion) {
 	*outVersion = -1;
 
 	int tableExists = 0;
-	enum ScribeError err = scribeDbTableExists(db, SCRIBE_DB_TABLE_MIGRATIONS, &tableExists);
+	enum ScribeError err = migrationsTableExists(db, &tableExists);
 	if (err != SCRIBE_OK) {
 		return err;
 	}
@@ -243,26 +217,79 @@ static enum ScribeError getCurrentMigrationVersion(struct ScribeDb* db, int* out
 		return SCRIBE_OK;
 	}
 
-	int version = -1;
-	int hasVersion = 0;
+	struct ScribeGetLatestMigrationRow row;
+	int hasRow = 0;
 
-	err = scribeDbQueryInt(db,
-	                       "SELECT MAX(" SCRIBE_DB_COL_MIGRATIONS_VERSION ") FROM " SCRIBE_DB_TABLE_MIGRATIONS ";",
-	                       &version,
-	                       &hasVersion);
+	err = scribeGetLatestMigration(db, &row, &hasRow);
 	if (err != SCRIBE_OK) {
 		return err;
 	}
 
-	if (!hasVersion) {
-		return SCRIBE_ERR_INVALID_MIGRATION_PLAN;
+	if (!hasRow) {
+		return SCRIBE_OK;
 	}
 
-	*outVersion = version;
+	int isFailed = strcmp(row.status, "failed") == 0;
+	scribeGetLatestMigrationRowFree(&row);
+
+	if (isFailed) {
+		return SCRIBE_ERR_PREVIOUS_MIGRATION_FAILED;
+	}
+
+	*outVersion = row.version;
 	return SCRIBE_OK;
 }
 
-static enum ScribeError applyMigrationPlan(struct ScribeDb* db, const struct ScribeMigrationPlan* plan) {
+static enum ScribeError applySingleMigration(sqlite3* db, const struct ScribeMigration* migration) {
+	if (db == NULL || migration == NULL || migration->filepath == NULL || migration->filepath[0] == '\0') {
+		return SCRIBE_ERR_INVALID_ARGUMENT;
+	}
+
+	enum ScribeError err = scribeInsertMigrationAttempt(db, migration->version, migration->filename, "failed");
+	if (err != SCRIBE_OK) {
+		return err;
+	}
+
+	char* sql = NULL;
+	err = readFile(migration->filepath, &sql, NULL);
+	if (err != SCRIBE_OK) {
+		return err;
+	}
+
+	char* sqliteErr = NULL;
+	int rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &sqliteErr);
+	if (rc != SQLITE_OK) {
+		sqlite3_free(sqliteErr);
+		err = SCRIBE_ERR_SQL;
+		goto cleanup_sql;
+	}
+
+	rc = sqlite3_exec(db, sql, NULL, NULL, &sqliteErr);
+	if (rc != SQLITE_OK) {
+		sqlite3_free(sqliteErr);
+		sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+		err = SCRIBE_ERR_SQL;
+		goto cleanup_sql;
+	}
+
+	rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &sqliteErr);
+	if (rc != SQLITE_OK) {
+		sqlite3_free(sqliteErr);
+		sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+		err = SCRIBE_ERR_SQL;
+		goto cleanup_sql;
+	}
+
+	/* Migration's own transaction committed successfully - now flip the tracking
+	 * row from 'failed' to 'applied', as its own separately-committed statement. */
+	err = scribeMarkMigrationApplied(db, "applied", migration->version);
+
+cleanup_sql:
+	free(sql);
+	return err;
+}
+
+static enum ScribeError applyMigrationPlan(sqlite3* db, const struct ScribeMigrationPlan* plan) {
 	if (db == NULL || plan == NULL || (plan->count > 0 && plan->items == NULL)) {
 		return SCRIBE_ERR_INVALID_ARGUMENT;
 	}
@@ -293,9 +320,18 @@ static enum ScribeError applyMigrationPlan(struct ScribeDb* db, const struct Scr
 	return SCRIBE_OK;
 }
 
-enum ScribeError applyMigrations(struct ScribeDb* db, const char* migrationsDir) {
-	if (db == NULL || migrationsDir == NULL || migrationsDir[0] == '\0') {
+enum ScribeError applyMigrations(const char* dbPath, const char* migrationsDir) {
+	if (dbPath == NULL || dbPath[0] == '\0' || migrationsDir == NULL || migrationsDir[0] == '\0') {
 		return SCRIBE_ERR_INVALID_ARGUMENT;
+	}
+
+	sqlite3* db = NULL;
+	int rc = sqlite3_open(dbPath, &db);
+	if (rc != SQLITE_OK) {
+		if (db != NULL) {
+			sqlite3_close(db);
+		}
+		return SCRIBE_ERR_IO;
 	}
 
 	struct ScribeMigrationPlan plan = {0};
@@ -309,5 +345,6 @@ enum ScribeError applyMigrations(struct ScribeDb* db, const char* migrationsDir)
 
 cleanup:
 	destroyMigrationPlan(&plan);
+	sqlite3_close(db);
 	return err;
 }

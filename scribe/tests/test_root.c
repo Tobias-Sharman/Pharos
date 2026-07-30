@@ -6,7 +6,7 @@
 
 #include <scribe/error.h>
 
-#include "../src/root.h"
+#include "root.h"
 
 struct RootPathJoinCase {
 	const char* name;

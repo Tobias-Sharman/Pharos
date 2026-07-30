@@ -4,6 +4,9 @@
 *.swo
 *~
 
+# Python
+*/.venv
+
 # Build directories
 build/
 */build/

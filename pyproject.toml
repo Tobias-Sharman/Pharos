@@ -1,0 +1,36 @@
+[project]
+name = "pharos-tools"
+version = "0.1.0"
+description = "Build-time Python tooling for the Pharos Linux distribution project"
+requires-python = ">=3.14"
+dependencies = [
+    "sqlglot>=30.14.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+"A",
+"ANN",
+"B",
+"C4",
+"E",
+"F",
+"I",
+"N",
+"RUF",
+"S",
+"SIM",
+"UP",
+"W",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.basedpyright]
+typeCheckingMode = "strict"

@@ -1,8 +1,8 @@
-#include "../commands.h"
+#include "commands.h"
 
 #include <stdio.h>
 
-#include "../root.h"
+#include "root.h"
 
 static void printInitError(const enum ScribeError kErr, const struct ScribeArgs* args) {
 	switch (kErr) {

@@ -1,30 +1,24 @@
 BasedOnStyle: InheritParentConfig
-
 IncludeBlocks: Regroup
 MainIncludeChar: Any
 IncludeIsMainRegex: 'commands$'
-
 IncludeCategories:
   # Associated command header for command implementation files
-  - Regex: '^"\.\./commands\.h"$'
+  - Regex: '^"commands\.h"$'
     Priority: 0
     SortPriority: 0
-
   # Public Scribe headers
   - Regex: '^<scribe/.*>$'
     Priority: 3
     SortPriority: 0
-
   # C standard library headers
   - Regex: '^<.*\.h>$'
     Priority: 1
     SortPriority: 1
-
   # Other external angle headers
   - Regex: '^<.*>$'
     Priority: 2
     SortPriority: 2
-
   # Other private/local quoted headers
   - Regex: '^".*"$'
     Priority: 4

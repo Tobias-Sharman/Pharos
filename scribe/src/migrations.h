@@ -3,8 +3,6 @@
 
 #include <scribe/error.h>
 
-#include "db.h"
-
-enum ScribeError applyMigrations(struct ScribeDb* db, const char* migrationsDir);
+enum ScribeError applyMigrations(const char* dbPath, const char* migrationsDir);
 
 #endif // SCRIBE_MIGRATIONS_H
