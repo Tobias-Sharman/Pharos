@@ -185,7 +185,6 @@ cleanup:
 	return err;
 }
 
-// TODO: Should be a query
 static enum ScribeError migrationsTableExists(sqlite3* db, int* outExists) {
 	struct ScribeMigrationsTableExistsRow row;
 	int hasRow = 0;
@@ -280,8 +279,6 @@ static enum ScribeError applySingleMigration(sqlite3* db, const struct ScribeMig
 		goto cleanup_sql;
 	}
 
-	/* Migration's own transaction committed successfully - now flip the tracking
-	 * row from 'failed' to 'applied', as its own separately-committed statement. */
 	err = scribeMarkMigrationApplied(db, "applied", migration->version);
 
 cleanup_sql:
