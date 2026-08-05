@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "scribe/error.h"
 
@@ -87,6 +88,22 @@ enum ScribeError makeDirectory(const char* path, mode_t mode) {
 	}
 
 	return SCRIBE_OK;
+}
+
+enum ScribeError makeSymlink(const char* targetPath, const char* linkPath) {
+	if (targetPath == NULL || targetPath[0] == '\0' || linkPath == NULL || linkPath[0] == '\0') {
+		return SCRIBE_ERR_INVALID_ARGUMENT;
+	}
+
+	if (symlink(targetPath, linkPath) == 0) {
+		return SCRIBE_OK;
+	}
+
+	if (errno == EEXIST) {
+		return SCRIBE_OK;
+	}
+
+	return SCRIBE_ERR_ROOT_CREATE_FAILED;
 }
 
 enum ScribeError readFile(const char* path, char** outBuffer, size_t* outSize) {

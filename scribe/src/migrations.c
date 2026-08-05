@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <sqlite3.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -239,14 +240,20 @@ static enum ScribeError getCurrentMigrationVersion(sqlite3* db, int* outVersion)
 	return SCRIBE_OK;
 }
 
-static enum ScribeError applySingleMigration(sqlite3* db, const struct ScribeMigration* migration) {
+static enum ScribeError applySingleMigration(sqlite3* db,
+                                             const struct ScribeMigration* migration,
+                                             int trackingTableExists) {
 	if (db == NULL || migration == NULL || migration->filepath == NULL || migration->filepath[0] == '\0') {
 		return SCRIBE_ERR_INVALID_ARGUMENT;
 	}
 
-	enum ScribeError err = scribeInsertMigrationAttempt(db, migration->version, migration->filename, "failed");
-	if (err != SCRIBE_OK) {
-		return err;
+	enum ScribeError err = SCRIBE_OK;
+
+	if (trackingTableExists) {
+		err = scribeInsertMigrationAttempt(db, migration->version, migration->filename, "failed");
+		if (err != SCRIBE_OK) {
+			return err;
+		}
 	}
 
 	char* sql = NULL;
@@ -258,14 +265,23 @@ static enum ScribeError applySingleMigration(sqlite3* db, const struct ScribeMig
 	char* sqliteErr = NULL;
 	int rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, &sqliteErr);
 	if (rc != SQLITE_OK) {
-		sqlite3_free(sqliteErr);
+		if (sqliteErr != NULL) {
+			(void)fprintf(stderr,
+			              "scribe: migration %s failed to begin transaction: %s\n",
+			              migration->filename,
+			              sqliteErr);
+			sqlite3_free(sqliteErr);
+		}
 		err = SCRIBE_ERR_SQL;
 		goto cleanup_sql;
 	}
 
 	rc = sqlite3_exec(db, sql, NULL, NULL, &sqliteErr);
 	if (rc != SQLITE_OK) {
-		sqlite3_free(sqliteErr);
+		if (sqliteErr != NULL) {
+			(void)fprintf(stderr, "scribe: migration %s failed: %s\n", migration->filename, sqliteErr);
+			sqlite3_free(sqliteErr);
+		}
 		sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
 		err = SCRIBE_ERR_SQL;
 		goto cleanup_sql;
@@ -273,13 +289,20 @@ static enum ScribeError applySingleMigration(sqlite3* db, const struct ScribeMig
 
 	rc = sqlite3_exec(db, "COMMIT;", NULL, NULL, &sqliteErr);
 	if (rc != SQLITE_OK) {
-		sqlite3_free(sqliteErr);
+		if (sqliteErr != NULL) {
+			(void)fprintf(stderr, "scribe: migration %s failed to commit: %s\n", migration->filename, sqliteErr);
+			sqlite3_free(sqliteErr);
+		}
 		sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
 		err = SCRIBE_ERR_SQL;
 		goto cleanup_sql;
 	}
 
-	err = scribeMarkMigrationApplied(db, "applied", migration->version);
+	if (trackingTableExists) {
+		err = scribeMarkMigrationApplied(db, "applied", migration->version);
+	} else {
+		err = scribeInsertMigrationAttempt(db, migration->version, migration->filename, "applied");
+	}
 
 cleanup_sql:
 	free(sql);
@@ -301,6 +324,12 @@ static enum ScribeError applyMigrationPlan(sqlite3* db, const struct ScribeMigra
 		return SCRIBE_ERR_INVALID_MIGRATION_PLAN;
 	}
 
+	int trackingTableExists = 0;
+	err = migrationsTableExists(db, &trackingTableExists);
+	if (err != SCRIBE_OK) {
+		return err;
+	}
+
 	for (size_t i = 0; i < plan->count; ++i) {
 		const struct ScribeMigration* migration = &plan->items[i];
 
@@ -308,10 +337,12 @@ static enum ScribeError applyMigrationPlan(sqlite3* db, const struct ScribeMigra
 			continue;
 		}
 
-		err = applySingleMigration(db, migration);
+		err = applySingleMigration(db, migration, trackingTableExists);
 		if (err != SCRIBE_OK) {
 			return err;
 		}
+
+		trackingTableExists = 1;
 	}
 
 	return SCRIBE_OK;

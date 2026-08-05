@@ -4,6 +4,8 @@
 
 #include "root.h"
 
+static const char* const g_kScribeDefaultMigrationsDir = "db/migrations"; // TODO: Change to something like usr/share
+
 static void printInitError(const enum ScribeError kErr, const struct ScribeArgs* args) {
 	switch (kErr) {
 		case SCRIBE_ERR_INVALID_ARGUMENT:
@@ -14,6 +16,17 @@ static void printInitError(const enum ScribeError kErr, const struct ScribeArgs*
 			break;
 		case SCRIBE_ERR_ROOT_CREATE_FAILED:
 			(void)fprintf(stderr, "scribe: failed to create root layout at '%s'\n", args->rootPath);
+			break;
+		case SCRIBE_ERR_PREVIOUS_MIGRATION_FAILED:
+			(void)fputs("scribe: a previous migration attempt failed and left the database in an unknown state, thus "
+			            "refusing to continue automatically\n",
+			            stderr);
+			break;
+		case SCRIBE_ERR_DUPLICATE_MIGRATION_VERSION:
+			(void)fputs("scribe: two migration files share the same version number\n", stderr);
+			break;
+		case SCRIBE_ERR_SQL:
+			(void)fputs("scribe: a migration failed to apply\n", stderr);
 			break;
 		default:
 			(void)fprintf(stderr, "scribe: failed to initialise root at '%s'\n", args->rootPath);
@@ -38,7 +51,7 @@ enum ScribeError runInitCommand(const struct ScribeArgs* args) {
 		return err;
 	}
 
-	err = createScribeRootLayout(&root);
+	err = createScribeRootLayout(&root, g_kScribeDefaultMigrationsDir);
 	if (err != SCRIBE_OK) {
 		printInitError(err, args);
 		return err;

@@ -1,32 +1,45 @@
 #include "root.h"
 
-#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
 #include "fs.h"
+#include "migrations.h"
 
-static const char* const g_kScribeRootDirectories[] = {"store",
+static const char* const g_kScribeRootDirectories[] = {"library",
+                                                       "library/generations",
+                                                       "library/generations/system",
+                                                       "library/generations/system/0",
+                                                       "library/pins",
+                                                       "library/pins/manual",
+                                                       "library/profiles",
+                                                       "library/tmp",
+                                                       "library/works",
                                                        "var",
-                                                       "var/profiles",
-                                                       "var/profiles/system",
-                                                       "var/profiles/system/generations",
-                                                       "var/profiles/system/generations/0",
-                                                       "var/gcroots",
-                                                       "var/sources",
                                                        "var/builds",
-                                                       "var/logs",
+                                                       "var/cache",
+                                                       "var/cache/scribe",
+                                                       "var/gcroots",
+                                                       "var/lib",
+                                                       "var/lib/scribe",
+                                                       "var/lib/scribe/locks",
+                                                       "var/lib/scribe/recipes",
+                                                       "var/lib/scribe/state",
+                                                       "var/lib/scribe/transactions",
+                                                       "var/log",
+                                                       "var/log/scribe",
+                                                       "var/sources",
+                                                       "var/spool",
                                                        "var/tmp"};
 
 static const size_t g_kScribeRootDirectoryCount
     = sizeof(g_kScribeRootDirectories) / sizeof(g_kScribeRootDirectories[0]);
 
-static const char* const g_kScribeSystemProfileCurrentLink = "var/profiles/system/current";
-static const char* const g_kScribeSystemProfileInitialGenerationLinkTarget = "generations/0";
+static const char* const g_kScribeSystemProfileCurrentLink = "library/profiles/system";
+static const char* const g_kScribeSystemProfileInitialGenerationLinkTarget = "../generations/system/0";
 
 enum ScribeError initScribeRoot(struct ScribeRoot* root, const char* path) {
 	if (root == NULL || path == NULL || path[0] == '\0') {
@@ -71,31 +84,23 @@ static enum ScribeError makeScribeRootSymlink(const struct ScribeRoot* root,
 	}
 
 	char* fullLinkPath = NULL;
-
 	enum ScribeError err = makeScribeRootPath(root, linkPath, &fullLinkPath);
 	if (err != SCRIBE_OK) {
 		return err;
 	}
 
-	if (symlink(targetPath, fullLinkPath) == 0) {
-		err = SCRIBE_OK;
-		goto cleanup;
-	}
+	err = makeSymlink(targetPath, fullLinkPath);
 
-	if (errno == EEXIST) {
-		err = SCRIBE_OK;
-		goto cleanup;
-	}
-
-	err = SCRIBE_ERR_ROOT_CREATE_FAILED;
-
-cleanup:
 	free(fullLinkPath);
 	return err;
 }
 
-enum ScribeError createScribeRootLayout(const struct ScribeRoot* root) {
+enum ScribeError createScribeRootLayout(const struct ScribeRoot* root, const char* migrationsDir) {
 	if (root == NULL || root->path == NULL || root->path[0] == '\0') {
+		return SCRIBE_ERR_INVALID_ARGUMENT;
+	}
+
+	if (migrationsDir == NULL || migrationsDir[0] == '\0') {
 		return SCRIBE_ERR_INVALID_ARGUMENT;
 	}
 
@@ -111,7 +116,20 @@ enum ScribeError createScribeRootLayout(const struct ScribeRoot* root) {
 		}
 	}
 
-	return makeScribeRootSymlink(root,
-	                             g_kScribeSystemProfileInitialGenerationLinkTarget,
-	                             g_kScribeSystemProfileCurrentLink);
+	err = makeScribeRootSymlink(root,
+	                            g_kScribeSystemProfileInitialGenerationLinkTarget,
+	                            g_kScribeSystemProfileCurrentLink);
+	if (err != SCRIBE_OK) {
+		return err;
+	}
+
+	char* dbPath = NULL;
+	err = makeScribeRootPath(root, "var/lib/scribe/ledger.sqlite", &dbPath);
+	if (err != SCRIBE_OK) {
+		return err;
+	}
+
+	err = applyMigrations(dbPath, migrationsDir);
+	free(dbPath);
+	return err;
 }

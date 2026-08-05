@@ -9,6 +9,8 @@ enum ScribeError makeJoinedPath(const char* basePath, const char* childPath, cha
 
 enum ScribeError makeDirectory(const char* path, mode_t mode);
 
+enum ScribeError makeSymlink(const char* targetPath, const char* linkPath);
+
 enum ScribeError readFile(const char* path, char** outBuffer, size_t* outSize);
 
 #endif // SCRIBE_FS_H

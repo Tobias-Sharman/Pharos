@@ -11,6 +11,6 @@ enum ScribeError initScribeRoot(struct ScribeRoot* root, const char* path);
 
 enum ScribeError makeScribeRootPath(const struct ScribeRoot* root, const char* childPath, char** outpath);
 
-enum ScribeError createScribeRootLayout(const struct ScribeRoot* root);
+enum ScribeError createScribeRootLayout(const struct ScribeRoot* root, const char* migrationsDir);
 
 #endif // SCRIBE_ROOT_H
